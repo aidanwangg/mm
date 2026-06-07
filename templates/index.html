@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mood Map · your library on a feelings plane</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◴</span>
+      <div>
+        <h1>Mood Map</h1>
+        <p class="tagline">Every song, plotted by feeling.</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="seg" id="method-seg" role="group" aria-label="Projection">
+        <button data-method="direct" class="active">Direct</button>
+        <button data-method="pca">PCA</button>
+        <button data-method="tsne">t-SNE</button>
+        <button data-method="umap">UMAP</button>
+      </div>
+      <span class="mode-badge" id="mode-badge">…</span>
+      {% if configured %}
+        <a class="btn ghost" id="auth-link" href="{{ url_for('login') }}">Connect Spotify</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if auth_error %}
+    <div class="banner error">Spotify sign-in failed: {{ auth_error }}</div>
+  {% endif %}
+
+  <main class="stage">
+    <section class="mapwrap">
+      <canvas id="map" aria-label="Mood map of your library"></canvas>
+
+      <div class="hint" id="hint">
+        Drag to pan · scroll to zoom · <b>Shift-drag</b> to select a region
+      </div>
+
+      <div class="tooltip" id="tooltip" hidden></div>
+
+      <div class="legend">
+        <div class="axis-x">Sad&nbsp;←&nbsp;&nbsp;valence&nbsp;&nbsp;→&nbsp;Happy</div>
+        <div class="axis-y">Energetic&nbsp;↑ &nbsp; energy &nbsp; ↓&nbsp;Calm</div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="stat">
+        <span id="track-count">0</span><label>songs on the map</label>
+      </div>
+
+      <div class="selection-card" id="selection-card" hidden>
+        <h2><span id="sel-count">0</span> selected</h2>
+        <p class="muted" id="sel-region"></p>
+        <input id="playlist-name" type="text" placeholder="Playlist name…" />
+        <button class="btn primary" id="make-playlist">Generate playlist</button>
+        <button class="btn ghost small" id="clear-sel">Clear selection</button>
+        <div id="playlist-result" class="result" hidden></div>
+        <ul id="sel-list" class="tracklist"></ul>
+      </div>
+
+      <div class="empty-sel muted" id="empty-sel">
+        <p><b>Shift-drag</b> a rectangle over the map to pick a mood region,
+        then turn it into a playlist.</p>
+        <p>Try the four corners:</p>
+        <ul class="quadrants">
+          <li>↗ happy &amp; energetic — party fuel</li>
+          <li>↘ happy &amp; calm — sunny acoustic</li>
+          <li>↙ sad &amp; calm — late-night feels</li>
+          <li>↖ sad &amp; energetic — cathartic bangers</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <div class="loader" id="loader" hidden><div class="spinner"></div><span id="loader-text">Loading…</span></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
