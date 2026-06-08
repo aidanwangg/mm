@@ -92,13 +92,17 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .legend { position: absolute; inset: 0; pointer-events: none; }
 .legend .axis-x {
   position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%);
-  color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.5px;
-  text-shadow: 0 1px 4px rgba(8, 10, 20, 0.8);
+  color: var(--ink); font-size: 22px; font-weight: 700; letter-spacing: 0.5px;
+  text-shadow: 0 1px 5px rgba(8, 10, 20, 0.9);
 }
 .legend .axis-y {
-  position: absolute; left: 38px; top: 50%; transform: rotate(-90deg);
-  transform-origin: left center; color: var(--ink); font-size: 16px;
-  font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 1px 4px rgba(8, 10, 20, 0.8);
+  position: absolute; left: 56px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--ink); font-size: 22px; font-weight: 700; letter-spacing: 0.5px;
+  text-align: center; text-shadow: 0 1px 5px rgba(8, 10, 20, 0.9);
+}
+.legend .axis-y .ax-mid {
+  font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 1px;
 }
 
 .tooltip {
