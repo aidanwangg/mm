@@ -51,6 +51,17 @@
     ];
   }
 
+  // Keep the [-1,1] data box within view: clamp panning so you can't drag the
+  // graph off into empty space. When the box is smaller than the viewport
+  // (zoomed out) the max pan is 0, so it stays centred and fixed in place.
+  function clampPan() {
+    const r = baseRadius() * zoom;                 // half-extent of the data box
+    const maxPanX = Math.max(0, r - canvas.clientWidth / 2);
+    const maxPanY = Math.max(0, r - canvas.clientHeight / 2);
+    panX = Math.min(maxPanX, Math.max(-maxPanX, panX));
+    panY = Math.min(maxPanY, Math.max(-maxPanY, panY));
+  }
+
   // ---------- color ----------
   // Hue swings blue (sad) → gold (happy); brightness rises with energy.
   function moodColor(x, y, alpha) {
@@ -65,6 +76,7 @@
     canvas.width = Math.round(canvas.clientWidth * dpr);
     canvas.height = Math.round(canvas.clientHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    clampPan();
     draw();
   }
 
@@ -327,6 +339,7 @@
       panX += sx - dragNow.x;
       panY += sy - dragNow.y;
       dragNow = { x: sx, y: sy };
+      clampPan();
       draw();
       return;
     }
@@ -374,6 +387,7 @@
     const r = baseRadius() * zoom;
     panX = sx - canvas.clientWidth / 2 - wx * r;
     panY = sy - canvas.clientHeight / 2 + wy * r;
+    clampPan();
     draw();
   }, { passive: false });
 
