@@ -227,9 +227,27 @@ def get_audio_features(token: dict, track_ids: Sequence[str]) -> Dict[str, dict]
 
 
 def build_library(token: dict, limit: int = 500) -> List[dict]:
-    """Fetch saved tracks and merge in their audio features."""
+    """Fetch saved tracks and merge in their audio features.
+
+    Spotify's own ``/audio-features`` is gone for apps created after
+    2024-11-27; when it denies access we fall back to ReccoBeats, which serves
+    the same descriptors keyed by Spotify track id.
+    """
     tracks = get_saved_tracks(token, limit=limit)
-    features = get_audio_features(token, [t["id"] for t in tracks])
+    ids = [t["id"] for t in tracks]
+    try:
+        features = get_audio_features(token, ids)
+    except FeaturesUnavailable:
+        import reccobeats
+
+        try:
+            features = reccobeats.get_audio_features(ids)
+        except reccobeats.ReccoBeatsError as exc:
+            raise FeaturesUnavailable(
+                "Spotify's /audio-features is unavailable for this app, and the "
+                f"ReccoBeats fallback also failed: {exc}"
+            ) from exc
+
     merged = []
     for t in tracks:
         feat = features.get(t["id"])
