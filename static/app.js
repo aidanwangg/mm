@@ -33,31 +33,42 @@
   let dpr = window.devicePixelRatio || 1;
 
   // ---------- geometry ----------
+  // Padding reserved around the plot so the dots never sit under the axis
+  // labels / hint (bottom) or the vertical label (left), and so the graph is
+  // centred in the area *between* the header and the bottom labels.
+  const PAD = { top: 40, right: 80, bottom: 104, left: 80 };
+  function plotRect() {
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    return {
+      cx: W / 2,                               // horizontally centred
+      cy: (PAD.top + (H - PAD.bottom)) / 2,    // centred between header & labels
+      w: Math.max(1, W - PAD.left - PAD.right),
+      h: Math.max(1, H - PAD.top - PAD.bottom),
+    };
+  }
   function baseRadius() {
-    return Math.min(canvas.clientWidth, canvas.clientHeight) * 0.42;
+    const p = plotRect();
+    return Math.max(10, Math.min(p.w, p.h) * 0.48);
   }
   function worldToScreen(wx, wy) {
     const r = baseRadius() * zoom;
-    return [
-      canvas.clientWidth / 2 + panX + wx * r,
-      canvas.clientHeight / 2 + panY - wy * r,
-    ];
+    const p = plotRect();
+    return [p.cx + panX + wx * r, p.cy + panY - wy * r];
   }
   function screenToWorld(sx, sy) {
     const r = baseRadius() * zoom;
-    return [
-      (sx - canvas.clientWidth / 2 - panX) / r,
-      -(sy - canvas.clientHeight / 2 - panY) / r,
-    ];
+    const p = plotRect();
+    return [(sx - p.cx - panX) / r, -(sy - p.cy - panY) / r];
   }
 
-  // Keep the [-1,1] data box within view: clamp panning so you can't drag the
-  // graph off into empty space. When the box is smaller than the viewport
-  // (zoomed out) the max pan is 0, so it stays centred and fixed in place.
+  // Keep the [-1,1] data box within the plot area: clamp panning so you can't
+  // drag the graph off into empty space or under the labels. When the box fits
+  // the plot area (zoomed out) the max pan is 0, so it stays centred and fixed.
   function clampPan() {
     const r = baseRadius() * zoom;                 // half-extent of the data box
-    const maxPanX = Math.max(0, r - canvas.clientWidth / 2);
-    const maxPanY = Math.max(0, r - canvas.clientHeight / 2);
+    const p = plotRect();
+    const maxPanX = Math.max(0, r - p.w / 2);
+    const maxPanY = Math.max(0, r - p.h / 2);
     panX = Math.min(maxPanX, Math.max(-maxPanX, panX));
     panY = Math.min(maxPanY, Math.max(-maxPanY, panY));
   }
@@ -385,8 +396,9 @@
     zoom = Math.min(40, Math.max(0.4, zoom * factor));
     // keep the cursor anchored to the same world point
     const r = baseRadius() * zoom;
-    panX = sx - canvas.clientWidth / 2 - wx * r;
-    panY = sy - canvas.clientHeight / 2 + wy * r;
+    const p = plotRect();
+    panX = sx - p.cx - wx * r;
+    panY = sy - p.cy + wy * r;
     clampPan();
     draw();
   }, { passive: false });
