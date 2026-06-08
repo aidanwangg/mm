@@ -101,7 +101,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   color: var(--ink); font-size: 22px; font-weight: 700; letter-spacing: 0.5px;
   text-align: center; text-shadow: 0 1px 5px rgba(8, 10, 20, 0.9);
 }
-.legend .axis-y .ax-mid {
+.legend .ax-mid {
   font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 1px;
 }
 
