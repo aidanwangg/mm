@@ -153,6 +153,9 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   justify-items: center; background: rgba(8, 10, 20, 0.6); z-index: 20;
   color: var(--ink); font-weight: 600;
 }
+/* The `display: grid` above outranks the browser's [hidden] { display: none },
+   so without this the overlay stays stuck on screen after the map loads. */
+.loader[hidden] { display: none; }
 .spinner {
   width: 42px; height: 42px; border-radius: 50%;
   border: 4px solid var(--line); border-top-color: var(--accent);
