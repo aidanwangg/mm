@@ -91,12 +91,14 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 .legend { position: absolute; inset: 0; pointer-events: none; }
 .legend .axis-x {
-  position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%);
-  color: var(--muted); font-size: 12px; letter-spacing: 0.4px;
+  position: absolute; left: 50%; bottom: 48px; transform: translateX(-50%);
+  color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.5px;
+  text-shadow: 0 1px 4px rgba(8, 10, 20, 0.8);
 }
 .legend .axis-y {
-  position: absolute; left: 14px; top: 50%; transform: rotate(-90deg);
-  transform-origin: left center; color: var(--muted); font-size: 12px; letter-spacing: 0.4px;
+  position: absolute; left: 18px; top: 50%; transform: rotate(-90deg);
+  transform-origin: left center; color: var(--ink); font-size: 16px;
+  font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 1px 4px rgba(8, 10, 20, 0.8);
 }
 
 .tooltip {
