@@ -40,8 +40,9 @@ across the mood plane, so you can play with every feature immediately.
 
 ## Live mode (your real library)
 
-Create a Spotify app at <https://developer.spotify.com/dashboard>, add a
-redirect URI, and export:
+Create a Spotify app at <https://developer.spotify.com/dashboard>. In its
+settings, set the **Redirect URI** to exactly `http://127.0.0.1:5002/callback`
+and enable the **Web API**. Then export your credentials and run:
 
 ```bash
 export SPOTIFY_CLIENT_ID=...
@@ -54,10 +55,24 @@ Click **Connect Spotify**, approve access, and your liked songs appear on the
 map. Selecting a region and hitting **Generate playlist** writes a real
 playlist to your account.
 
-> **Heads-up on audio features.** Spotify deprecated the `/audio-features`
-> endpoint for apps created after **2024-11-27**. Older apps still work; newer
-> ones get a 403, which the app reports cleanly and suggests demo mode. This is
-> a Spotify platform change, not a bug here.
+### Where audio features come from
+
+Spotify deprecated its own `/audio-features` endpoint for apps created after
+**2024-11-27**, so a brand-new Spotify app can't fetch valence/energy/etc. To
+keep live mode working, the Mood Map sources those metrics from
+[**ReccoBeats**](https://reccobeats.com) — a free service keyed on the same
+Spotify track IDs — via `reccobeats.py`. No extra key needed.
+
+Select the provider with an env var (default is ReccoBeats):
+
+```bash
+export MOODMAP_FEATURE_SOURCE=reccobeats   # default; works with new apps
+export MOODMAP_FEATURE_SOURCE=spotify      # only if your app predates 2024-11-27
+```
+
+If a lookup fails (network, or ReccoBeats doesn't have a track), the app reports
+it cleanly and you can always fall back to demo mode. ReccoBeats' catalogue is
+large but not exhaustive, so a few obscure tracks may not get placed.
 
 ## How the mapping works
 
@@ -76,17 +91,20 @@ to test:
 ## Project layout
 
 ```
-moodmap/
-  app.py               # Flask backend: OAuth, library fetch, mapping, playlists
-  spotify.py           # Spotify Web API client (OAuth, library, features, playlist)
-  mood.py              # mapping core: direct + PCA/t-SNE/UMAP, axis orientation
-  demo_data.py         # synthetic library for no-credentials demo mode
+mood-map/
+  app.py                 # Flask backend: OAuth, library fetch, mapping, playlists
+  spotify.py             # Spotify Web API client (OAuth, library, playlists)
+  reccobeats.py          # audio-features via ReccoBeats (Spotify replacement)
+  mood.py                # mapping core: direct + PCA/t-SNE/UMAP, axis orientation
+  demo_data.py           # synthetic library for no-credentials demo mode
   requirements.txt
-  templates/index.html # the page
+  templates/index.html   # the page
   static/
-    app.js             # interactive canvas scatter (pan/zoom/hover/lasso)
+    app.js               # interactive canvas scatter (pan/zoom/hover/lasso)
     style.css
-  tests/test_mood.py   # unit tests for the mapping core
+  tests/
+    test_mood.py         # unit tests for the mapping core
+    test_reccobeats.py   # unit tests for the ReccoBeats client (mocked HTTP)
 ```
 
 ## Run the tests

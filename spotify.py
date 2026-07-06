@@ -13,9 +13,11 @@ If those aren't set, :func:`is_configured` returns False and the app runs in
 demo mode instead.
 
 A note on audio features: Spotify deprecated the `/audio-features` endpoint for
-apps created after 2024-11-27. If your app predates that you're fine; otherwise
-the call raises :class:`FeaturesUnavailable`, which the web app surfaces with a
-suggestion to use demo mode.
+apps created after 2024-11-27. So by default the Mood Map sources features from
+ReccoBeats instead (see ``reccobeats.py`` and ``_features_for`` below); set
+MOODMAP_FEATURE_SOURCE=spotify to use Spotify's own endpoint if your app is
+grandfathered in. Either way, a failure raises :class:`FeaturesUnavailable`,
+which the web app surfaces cleanly.
 """
 
 from __future__ import annotations
@@ -226,28 +228,31 @@ def get_audio_features(token: dict, track_ids: Sequence[str]) -> Dict[str, dict]
     return out
 
 
-def build_library(token: dict, limit: int = 500) -> List[dict]:
-    """Fetch saved tracks and merge in their audio features.
+def _features_for(token: dict, track_ids: List[str]) -> Dict[str, dict]:
+    """Fetch audio features from the configured source.
 
-    Spotify's own ``/audio-features`` is gone for apps created after
-    2024-11-27; when it denies access we fall back to ReccoBeats, which serves
-    the same descriptors keyed by Spotify track id.
+    MOODMAP_FEATURE_SOURCE selects the provider:
+      * "reccobeats" (default) — free replacement for Spotify's dead endpoint,
+      * "spotify"              — Spotify's own /audio-features (only works for
+                                 apps grandfathered in before 2024-11-27).
     """
-    tracks = get_saved_tracks(token, limit=limit)
-    ids = [t["id"] for t in tracks]
+    source = os.environ.get("MOODMAP_FEATURE_SOURCE", "reccobeats").lower()
+    if source == "spotify":
+        return get_audio_features(token, track_ids)
+
+    import reccobeats
+
     try:
-        features = get_audio_features(token, ids)
-    except FeaturesUnavailable:
-        import reccobeats
+        return reccobeats.get_audio_features(track_ids)
+    except reccobeats.ReccoBeatsError as exc:
+        # Surface it through the same error the app already handles.
+        raise FeaturesUnavailable(str(exc)) from exc
 
-        try:
-            features = reccobeats.get_audio_features(ids)
-        except reccobeats.ReccoBeatsError as exc:
-            raise FeaturesUnavailable(
-                "Spotify's /audio-features is unavailable for this app, and the "
-                f"ReccoBeats fallback also failed: {exc}"
-            ) from exc
 
+def build_library(token: dict, limit: int = 500) -> List[dict]:
+    """Fetch saved tracks and merge in their audio features."""
+    tracks = get_saved_tracks(token, limit=limit)
+    features = _features_for(token, [t["id"] for t in tracks])
     merged = []
     for t in tracks:
         feat = features.get(t["id"])

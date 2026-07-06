@@ -1,29 +1,33 @@
-"""Audio-features fallback via ReccoBeats.
+"""ReccoBeats audio-features client — a drop-in for Spotify's deprecated endpoint.
 
-Spotify deprecated its ``/audio-features`` endpoint for apps created after
-2024-11-27, so a freshly created app gets a 403 and the mood map has nothing to
-plot. `ReccoBeats <https://reccobeats.com>`_ exposes a drop-in replacement keyed
-by Spotify track id, returning the same descriptors (valence, energy, …). We use
-it to keep live mode working with a real library.
+Spotify turned off `/audio-features` for apps created after 2024-11-27, so we
+source the same metrics (valence, energy, danceability, …) from ReccoBeats,
+a free service keyed on the very same Spotify track IDs.
 
-Endpoint (confirmed against the public API):
-    GET https://api.reccobeats.com/v1/audio-features?ids=<comma-separated ids>
-accepting up to 40 Spotify track ids per request.
+It's a two-step lookup (both endpoints batch up to 40 IDs at a time):
+
+  1. GET /v1/track?ids=<spotify_ids>        -> ReccoBeats track objects, each
+                                               with its own `id` and an `href`
+                                               back to the Spotify track.
+  2. GET /v1/audio-features?ids=<recco_ids> -> the audio features per track.
+
+`get_audio_features()` ties them together and returns `{spotify_id: features}`,
+matching the shape of `spotify.get_audio_features()` so it's interchangeable.
 """
 
 from __future__ import annotations
 
 import re
-import time
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Sequence
 
 import requests
 
 API_BASE = "https://api.reccobeats.com/v1"
-BATCH = 40  # ReccoBeats accepts up to 40 ids per request.
+BATCH = 40  # ReccoBeats returns at most 40 items per request
+TIMEOUT = 25
+_HEADERS = {"Accept": "application/json", "User-Agent": "MoodMap/1.0"}
 
-# Feature fields the app cares about (ReccoBeats mirrors Spotify's names).
-# mode/key aren't always present; mood.py supplies safe defaults if missing.
+# Spotify-compatible feature fields (same names mood.py expects).
 _FEATURE_KEYS = (
     "valence",
     "energy",
@@ -38,71 +42,83 @@ _FEATURE_KEYS = (
     "key",
 )
 
-_SPOTIFY_ID_RE = re.compile(r"/track/([A-Za-z0-9]+)")
+_SPOTIFY_ID_RE = re.compile(r"track[/:]([A-Za-z0-9]{22})")
 
 
 class ReccoBeatsError(RuntimeError):
-    """A ReccoBeats request failed."""
+    """A ReccoBeats request failed or returned no usable data."""
 
 
-def _items(payload) -> List[dict]:
-    """Normalise the response into a list of feature objects.
+def _chunks(seq: Sequence[str], size: int):
+    for i in range(0, len(seq), size):
+        yield seq[i : i + size]
 
-    ReccoBeats has returned results either as a bare list or wrapped under a
-    ``content``/``data`` key depending on the endpoint, so accept both.
-    """
-    if isinstance(payload, list):
-        return payload
+
+def _spotify_id_from_item(item: dict) -> str | None:
+    """Recover the original Spotify track id from a ReccoBeats track object."""
+    for key in ("href", "url", "spotifyUrl", "externalUrl"):
+        val = item.get(key)
+        if isinstance(val, str):
+            m = _SPOTIFY_ID_RE.search(val)
+            if m:
+                return m.group(1)
+    # last resort: scan any string field for a Spotify track link
+    for val in item.values():
+        if isinstance(val, str):
+            m = _SPOTIFY_ID_RE.search(val)
+            if m:
+                return m.group(1)
+    return None
+
+
+def _get(url: str, ids: Sequence[str]) -> List[dict]:
+    try:
+        resp = requests.get(
+            url, params={"ids": ",".join(ids)}, headers=_HEADERS, timeout=TIMEOUT
+        )
+    except requests.RequestException as exc:
+        raise ReccoBeatsError(f"Could not reach ReccoBeats: {exc}") from exc
+    if resp.status_code != 200:
+        raise ReccoBeatsError(
+            f"ReccoBeats returned {resp.status_code}: {resp.text[:200]}"
+        )
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        raise ReccoBeatsError("ReccoBeats returned invalid JSON.") from exc
+    # Responses wrap their list in a `content` array.
     if isinstance(payload, dict):
-        for key in ("content", "audio_features", "data", "items"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return value
-    return []
+        return payload.get("content") or []
+    return payload if isinstance(payload, list) else []
 
 
-def _spotify_id_from(item: dict) -> Optional[str]:
-    """Recover the Spotify track id an item refers to, via its ``href``."""
-    href = item.get("href") or ""
-    match = _SPOTIFY_ID_RE.search(href)
-    if match:
-        return match.group(1)
-    # Some payloads echo the queried id under a dedicated field.
-    return item.get("spotifyId") or item.get("trackId")
+def get_audio_features(spotify_ids: Sequence[str]) -> Dict[str, dict]:
+    """Return ``{spotify_id: features}`` for the given Spotify track ids."""
+    spotify_ids = [s for s in spotify_ids if s]
+    if not spotify_ids:
+        return {}
 
+    # Step 1: Spotify id -> ReccoBeats id (via the returned Spotify href).
+    recco_to_spotify: Dict[str, str] = {}
+    for batch in _chunks(spotify_ids, BATCH):
+        for item in _get(f"{API_BASE}/track", batch):
+            recco_id = item.get("id")
+            spotify_id = _spotify_id_from_item(item)
+            if recco_id and spotify_id:
+                recco_to_spotify[recco_id] = spotify_id
 
-def get_audio_features(track_ids: Sequence[str]) -> Dict[str, dict]:
-    """Return ``{spotify_id: features}`` from ReccoBeats for the given ids."""
-    ids = [t for t in track_ids if t]
+    if not recco_to_spotify:
+        raise ReccoBeatsError(
+            "ReccoBeats had no matching tracks for this library. Its catalogue "
+            "may not cover these songs."
+        )
+
+    # Step 2: ReccoBeats ids -> audio features, remapped onto Spotify ids.
     out: Dict[str, dict] = {}
-
-    for start in range(0, len(ids), BATCH):
-        batch = ids[start : start + BATCH]
-        try:
-            resp = requests.get(
-                f"{API_BASE}/audio-features",
-                params={"ids": ",".join(batch)},
-                timeout=20,
-            )
-        except requests.RequestException as exc:
-            raise ReccoBeatsError(f"ReccoBeats request failed: {exc}") from exc
-        if resp.status_code != 200:
-            raise ReccoBeatsError(
-                f"ReccoBeats audio-features failed: "
-                f"{resp.status_code} {resp.text[:200]}"
-            )
-
-        items = _items(resp.json())
-        for idx, item in enumerate(items):
-            # Prefer the href mapping; fall back to request order if the batch
-            # came back 1:1 without identifying fields.
-            sid = _spotify_id_from(item)
-            if not sid and len(items) == len(batch):
-                sid = batch[idx]
-            if not sid:
-                continue
-            out[sid] = {k: item.get(k) for k in _FEATURE_KEYS}
-
-        time.sleep(0.1)  # stay under the rate limit on large libraries
-
+    recco_ids = list(recco_to_spotify)
+    for batch in _chunks(recco_ids, BATCH):
+        for feat in _get(f"{API_BASE}/audio-features", batch):
+            spotify_id = recco_to_spotify.get(feat.get("id"))
+            if spotify_id:
+                out[spotify_id] = {k: feat.get(k) for k in _FEATURE_KEYS}
     return out
